@@ -582,9 +582,50 @@ namespace Cosmos.IL2CPU
 
                     // 32-bit metadata signature token.
                     case OperandType.InlineSig:
-                        xILOpCode = new ILOpCodes.OpSig(xOpCodeVal, xOpPos, xPos + 4, ReadInt32(xIL, xPos), xCurrentExceptionRegion);
-                        xPos = xPos + 4;
-                        break;
+                        {
+                            var xSigToken = ReadInt32(xIL, xPos);
+                            var xOpSig = new ILOpCodes.OpSig(xOpCodeVal, xOpPos, xPos + 4, xSigToken, xCurrentExceptionRegion);
+                            
+                            // Try to resolve the signature to get parameter count and return type info
+                            try
+                            {
+                                var xSignature = xModule.ResolveSignature(xSigToken);
+                                if (xSignature != null && xSignature.Length >= 2)
+                                {
+                                    // Parse signature according to ECMA-335 specification
+                                    // Byte 0: Calling convention
+                                    // Byte 1: Parameter count (compressed integer)
+                                    // Bytes 2+: Return type and parameter types
+                                    
+                                    var xCallConv = xSignature[0];
+                                    var xParamCount = xSignature[1];
+                                    
+                                    // Check calling convention to determine if this is a function signature
+                                    var hasThis = (xCallConv & 0x20) != 0;
+                                    var isVararg = (xCallConv & 0x05) == 0x05;
+                                    
+                                    var xHasReturnValue = false;
+                                    if (xSignature.Length > 2)
+                                    {
+                                        var returnTypeElement = xSignature[2];
+                                        // ELEMENT_TYPE_VOID = 0x01
+                                        xHasReturnValue = returnTypeElement != 0x01;
+                                    }
+                                    
+                                    xOpSig.ParameterCount = xParamCount;
+                                    xOpSig.HasReturnValue = xHasReturnValue;
+                                }
+                            }
+                            catch
+                            {
+                                xOpSig.ParameterCount = 0;
+                                xOpSig.HasReturnValue = true;
+                            }
+                            
+                            xILOpCode = xOpSig;
+                            xPos = xPos + 4;
+                            break;
+                        }
 
                     case OperandType.InlineString:
                         xILOpCode = new ILOpCodes.OpString(xOpCodeVal, xOpPos, xPos + 4, xModule.ResolveString(ReadInt32(xIL, xPos)), xCurrentExceptionRegion);
