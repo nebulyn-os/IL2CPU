@@ -934,8 +934,14 @@ namespace Cosmos.IL2CPU
                 XS.Push((uint)(xType.IsValueType ? 1 : 0));
                 XS.Push((uint)(xType.IsValueType && !xType.IsByRef && !xType.IsPointer && !xType.IsPrimitive ? 1 : 0));
 
-                LdStr.PushString(Assembler, xType.Name);
-                LdStr.PushString(Assembler, xType.AssemblyQualifiedName);
+                string typeNameLiteral = xType.Name ?? string.Empty;
+                string typeAsmQualified = xType.AssemblyQualifiedName ?? string.Empty;
+                if (xType.Name == null || xType.AssemblyQualifiedName == null)
+                {
+                    Console.WriteLine($"[IL2CPU][Warn] Type metadata name null for {xType}. NameNull={xType.Name==null} AQNull={xType.AssemblyQualifiedName==null}");
+                }
+                LdStr.PushString(Assembler, typeNameLiteral);
+                LdStr.PushString(Assembler, typeAsmQualified);
 
                 Call(VTablesImplRefs.SetTypeInfoRef);
 
@@ -1046,13 +1052,28 @@ namespace Cosmos.IL2CPU
 
                 foreach (var xInterface in interfaces)
                 {
-                    foreach (var xMethod in xInterface.GetMethods())
+                    // Skip open generic definitions without concrete type arguments
+                    if (xInterface.ContainsGenericParameters)
                     {
-                        var szArray = aMethodSet.Where(method => method.DeclaringType.IsGenericType
+                        continue;
+                    }
+                    foreach (var xInterfaceMethod in xInterface.GetMethods())
+                    {
+                        var szArrayImplMethods = aMethodSet.Where(method => method.DeclaringType.IsGenericType
                                                        && method.DeclaringType.GetGenericTypeDefinition() == typeof(SZArrayImpl<>)).ToList();
-                        var implementation = szArray.First(method => method.Name == xMethod.Name
-                            && method.DeclaringType.GenericTypeArguments[0].Name == xMethod.DeclaringType.GenericTypeArguments[0].Name);
-                        xList.Add(implementation);
+                        // Find a matching implementation; be defensive about generic args
+                        var impl = szArrayImplMethods.FirstOrDefault(method => method.Name == xInterfaceMethod.Name
+                            && method.DeclaringType.GenericTypeArguments.Length > 0
+                            && xInterfaceMethod.DeclaringType.GenericTypeArguments.Length > 0
+                            && method.DeclaringType.GenericTypeArguments[0] == xInterfaceMethod.DeclaringType.GenericTypeArguments[0]);
+                        if (impl != null)
+                        {
+                            xList.Add(impl);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[IL2CPU][Warn] Missing SZArrayImpl implementation for array generic interface method {xInterfaceMethod}.");
+                        }
                     }
                 }
             }
@@ -1226,7 +1247,12 @@ namespace Cosmos.IL2CPU
                         {
                             if (ILOp.IsReferenceType(aFrom.MethodBase.DeclaringType) && !ILOp.IsReferenceType(xParams[0].ParameterType))
                             {
-                                throw new Exception("Original method argument $this is a reference type. Plug attribute first argument is not an argument type, nor was it marked with ObjectPointerAccessAttribute! Method: " + aFrom.MethodBase.GetFullName() + " Parameter: " + xParams[0].Name);
+                                string expectedType = aFrom.MethodBase.DeclaringType.FullName;
+                                string plugParamType = xParams[0].ParameterType.FullName;
+                                throw new Exception(
+                                    "Plug mismatch: first parameter must represent the instance. " +
+                                    "Original 'this' type is reference type ('" + expectedType + "'), but plug parameter '" + xParams[0].Name + "' has non-reference type ('" + plugParamType + "') without [ObjectPointerAccess]. " +
+                                    "Add a first parameter of type '" + expectedType + "' or 'object' (or annotate current first parameter with [ObjectPointerAccess]). Method: " + aFrom.MethodBase.GetFullName());
                             }
                         }
 
@@ -1267,7 +1293,11 @@ namespace Cosmos.IL2CPU
                     {
                         if (ILOp.IsReferenceType(xFromParameters[xOriginalParamsIdx].ParameterType) && !ILOp.IsReferenceType(xParams[xCurParamIdx].ParameterType))
                         {
-                            throw new Exception("Original method argument $this is a reference type. Plug attribute first argument is not an argument type, nor was it marked with ObjectPointerAccessAttribute! Method: " + aFrom.MethodBase.GetFullName() + " Parameter: " + xParam.Name);
+                            string expectedType = xFromParameters[xOriginalParamsIdx].ParameterType.FullName;
+                            string plugParamType = xParams[xCurParamIdx].ParameterType.FullName;
+                            throw new Exception(
+                                "Plug mismatch: parameter '" + xParam.Name + "' type ('" + plugParamType + "') is not a reference type while original parameter type ('" + expectedType + "') is a reference type. " +
+                                "Annotate plug parameter with [ObjectPointerAccess] if you intentionally use a raw pointer, or change its type to match. Method: " + aFrom.MethodBase.GetFullName());
                         }
                         // normal field access
                         XS.Comment("Loading parameter " + (xCurParamIdx + xCurParamOffset));

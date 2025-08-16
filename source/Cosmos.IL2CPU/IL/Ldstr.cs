@@ -34,6 +34,19 @@ namespace Cosmos.IL2CPU.X86.IL
         /// <exception cref="Exception"></exception>
         public static void PushString(Assembler aAssembler, string aValue)
         {
+            if (aValue == null)
+            {
+                // Ldstr with a null literal is invalid IL; provide clearer diagnostics and (optionally) fallback.
+                // Fallback: treat null as empty string only if env var IL2CPU_LDSTR_NULL_FALLBACK is set.
+                if (Environment.GetEnvironmentVariable("IL2CPU_LDSTR_NULL_FALLBACK") == "1")
+                {
+                    aValue = string.Empty;
+                }
+                else
+                {
+                    throw new ArgumentNullException(nameof(aValue), "Ldstr encountered a null literal. Set IL2CPU_LDSTR_NULL_FALLBACK=1 to coerce to empty string.");
+                }
+            }
             string xDataName = GetContentsArrayName(aAssembler, aValue);
             XS.Comment("String Value: \"" + aValue.Replace("\r", "\\r").Replace("\n", "\\n") + "\"");
             XS.Push(xDataName);
@@ -65,6 +78,18 @@ namespace Cosmos.IL2CPU.X86.IL
         /// <returns></returns>
         public static string GetContentsArrayName(Assembler assembler, string aLiteral)
         {
+            if (aLiteral == null)
+            {
+                // Should have been caught earlier; guard again for safety.
+                if (Environment.GetEnvironmentVariable("IL2CPU_LDSTR_NULL_FALLBACK") == "1")
+                {
+                    aLiteral = string.Empty;
+                }
+                else
+                {
+                    throw new ArgumentNullException(nameof(aLiteral), "Ldstr storage creation received null literal.");
+                }
+            }
             // check if we already have this string literal emitted, if yes reuse it
             if(stringLiterals.TryGetValue(aLiteral, out string xDataName))
             {
