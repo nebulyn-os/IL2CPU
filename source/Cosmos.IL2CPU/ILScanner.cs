@@ -647,7 +647,19 @@ namespace Cosmos.IL2CPU
             if (aType.IsGenericType && new string[] { "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection" }
                         .Any(i => aType.Name.Contains(i)))
             {
-                Queue(aType.GenericTypeArguments[0].MakeArrayType(), aType, "CallVirt of Generic Interface for Array");
+                // Guard against open generic types or unexpected metadata issues
+                var xArg = aType.GenericTypeArguments.FirstOrDefault();
+                if (xArg != null)
+                {
+                    try
+                    {
+                        Queue(xArg.MakeArrayType(), aType, "CallVirt of Generic Interface for Array");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogWarning?.Invoke($"ILScanner warning: Failed queuing array interface helper for '{aType}': {ex.Message}");
+                    }
+                }
             }
 
             // Add immediate ancestor type

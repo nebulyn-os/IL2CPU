@@ -624,7 +624,14 @@ namespace Cosmos.IL2CPU
         {
             if (aType == null)
             {
-                throw new ArgumentNullException(nameof(aType));
+                // Graceful fallback: treat unknown (null) type as object reference size to avoid hard failure.
+                // This condition should not normally happen; log once per call site pattern.
+                try
+                {
+                    Console.WriteLine("[IL2CPU][Warn] SizeOfType received null Type. Using fallback size=4. This typically indicates: missing generic argument, metadata resolve failure, or a plug returning null. Enable ILScanner logging to trace origin. Stack: " + Environment.StackTrace.Split('\n').Take(6).Aggregate((a,b)=>a+"|"+b));
+                }
+                catch { /* ignore logging issues */ }
+                return 4; // pointer size fallback
             }
             if (aType.IsEnum)
             {

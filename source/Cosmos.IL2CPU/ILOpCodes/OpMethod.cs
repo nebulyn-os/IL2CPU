@@ -45,7 +45,7 @@ namespace Cosmos.IL2CPU.ILOpCodes
       {
         case Code.Call:
         case Code.Callvirt:
-          var methodInfo = Value as MethodInfo;
+          MethodInfo methodInfo = Value as MethodInfo;
           if (methodInfo != null && methodInfo.ReturnType != typeof(void))
           {
             return 1;
@@ -71,7 +71,7 @@ namespace Cosmos.IL2CPU.ILOpCodes
       {
         case Code.Call:
         case Code.Callvirt:
-          var xMethodInfo = Value as MethodInfo;
+          MethodInfo xMethodInfo = Value as MethodInfo;
           if (xMethodInfo != null && xMethodInfo.ReturnType != typeof(void))
           {
             StackPushTypes[0] = xMethodInfo.ReturnType;
@@ -85,6 +85,10 @@ namespace Cosmos.IL2CPU.ILOpCodes
           StackPushTypes[0] = Value.DeclaringType;
           break;
         case Code.Ldftn:
+          StackPushTypes[0] = typeof(IntPtr);
+          return;
+        case Code.Ldvirtftn:
+          // Virtual function pointer, result type is managed function pointer (represented as IntPtr)
           StackPushTypes[0] = typeof(IntPtr);
           return;
 

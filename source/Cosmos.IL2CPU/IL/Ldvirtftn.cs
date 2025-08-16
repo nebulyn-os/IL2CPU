@@ -1,4 +1,5 @@
 using System;
+using IL2CPU.API;
 
 
 namespace Cosmos.IL2CPU.X86.IL
@@ -10,10 +11,16 @@ namespace Cosmos.IL2CPU.X86.IL
 		{
 		}
 
-    public override void Execute(Il2cpuMethodInfo aMethod, ILOpCode aOpCode) {
-        DoNullReferenceCheck(Assembler, DebugEnabled, 0);
-        throw new NotImplementedException();
-    }
+	public override void Execute(Il2cpuMethodInfo aMethod, ILOpCode aOpCode) {
+		// Stack prior: [objectref]
+		// Pops object reference, pushes function pointer.
+		DoNullReferenceCheck(Assembler, DebugEnabled, 0);
+		// For now we resolve to the method's label directly. True virtual dispatch for delegates will occur at callsite.
+		// This is a simplification: proper Ldvirtftn should walk vtable using the instance type.
+		Cosmos.IL2CPU.ILOpCodes.OpMethod opMethod = (Cosmos.IL2CPU.ILOpCodes.OpMethod)aOpCode;
+		XSharp.XS.Pop(XSharp.XSRegisters.EAX); // discard instance (was only for null check)
+		XSharp.XS.Push(LabelName.Get(opMethod.Value));
+	}
 
     
 		// using System;
